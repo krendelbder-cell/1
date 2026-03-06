@@ -1,0 +1,454 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+
+-- ========== НАСТРОЙКИ ==========
+-- ================================
+
+-- Состояния функций
+local espEnabled = false
+local slowfallEnabled = false
+local boostEnabled = false
+local noclipEnabled = false
+local brainrotEnabled = false
+local currentSlowfallForce = nil
+local boostBodyVelocity = nil
+local boostFrame = nil
+local antiCheatBypassed = false
+local brainrotConnection = nil
+
+-- Функция обхода античита (базовая)
+local function bypassAntiCheat()
+    if antiCheatBypassed then return end
+    local keywords = {"kick", "ban", "ant", "cheat", "ac", "anti", "detect", "moderator", "exploit", "inject"}
+    local function disableScript(scriptObj)
+        if scriptObj:IsA("Script") or scriptObj:IsA("LocalScript") then
+            for _, kw in ipairs(keywords) do
+                if scriptObj.Name:lower():find(kw) or (scriptObj.Source and scriptObj.Source:lower():find(kw)) then
+                    scriptObj.Disabled = true
+                    break
+                end
+            end
+        end
+    end
+    local places = {
+        player:WaitForChild("PlayerGui"),
+        player:WaitForChild("Backpack"),
+        player.Character,
+        workspace
+    }
+    for _, place in ipairs(places) do
+        if place then
+            for _, obj in ipairs(place:GetDescendants()) do
+                disableScript(obj)
+            end
+        end
+    end
+    antiCheatBypassed = true
+    print("[FSOCIETY] Anti-cheat bypass completed.")
+end
+
+-- Выполняем обход при запуске
+bypassAntiCheat()
+
+-- Функция для получения актуального персонажа
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local character = getCharacter()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- GUI (главное меню) с защитой от дублирования
+local gui = player:FindFirstChild("PlayerGui"):FindFirstChild("FSOCIETY_GUI")
+if gui then gui:Destroy() end
+gui = Instance.new("ScreenGui")
+gui.Parent = player:WaitForChild("PlayerGui")
+gui.Name = "FSOCIETY_GUI"
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame")
+frame.Parent = gui
+frame.Size = UDim2.new(0,300,0,450)
+frame.Position = UDim2.new(0.35,0,0.35,0)
+frame.BackgroundColor3 = Color3.fromRGB(25,25,30)
+frame.BackgroundTransparency = 0.25
+frame.Active = true
+frame.Draggable = true
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0,14)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Parent = frame
+title.Size = UDim2.new(1,0,0,30)
+title.BackgroundTransparency = 1
+title.Text = "FSOCIETY PANEL"
+title.TextScaled = true
+title.TextColor3 = Color3.new(1,1,1)
+
+-- Функция анимации кнопок
+local function animate(btn, color)
+    local tween = TweenService:Create(btn, TweenInfo.new(0.25), {BackgroundColor3 = color})
+    tween:Play()
+end
+
+-- Создание кнопок
+local function createButton(parent, yPos, text, colorOff, colorOn)
+    local btn = Instance.new("TextButton")
+    btn.Parent = parent
+    btn.Size = UDim2.new(0.8,0,0.12,0)
+    btn.Position = UDim2.new(0.1,0, yPos,0)
+    btn.Text = text .. " OFF"
+    btn.BackgroundColor3 = colorOff
+    btn.TextColor3 = Color3.new(1,1,1)
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0,12)
+    btnCorner.Parent = btn
+    return btn
+end
+
+local espButton = createButton(frame, 0.08, "ESP", Color3.fromRGB(45,45,65), Color3.fromRGB(80,120,255))
+local boostMainButton = createButton(frame, 0.24, "BOOST", Color3.fromRGB(45,45,65), Color3.fromRGB(255,150,0))
+local slowfallButton = createButton(frame, 0.40, "SLOWFALL", Color3.fromRGB(45,45,65), Color3.fromRGB(120,90,255))
+local noclipButton = createButton(frame, 0.56, "NOCLIP", Color3.fromRGB(45,45,65), Color3.fromRGB(200,100,200))
+local brainrotButton = createButton(frame, 0.72, "BRAINROT", Color3.fromRGB(45,45,65), Color3.fromRGB(180,0,180))
+
+-- ========== ESP ==========
+local function addESP(plr)
+    if plr == player then return end
+    local char = plr.Character
+    if not char then return end
+    if char:FindFirstChildOfClass("Highlight") then return end
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Color3.fromRGB(255,60,60)
+    highlight.Parent = char
+    local head = char:FindFirstChild("Head")
+    if head and not head:FindFirstChildOfClass("BillboardGui") then
+        local bill = Instance.new("BillboardGui")
+        bill.Size = UDim2.new(0,200,0,40)
+        bill.StudsOffset = Vector3.new(0,2,0)
+        bill.AlwaysOnTop = true
+        bill.Parent = head
+        local text = Instance.new("TextLabel")
+        text.Size = UDim2.new(1,0,1,0)
+        text.BackgroundTransparency = 1
+        text.Text = plr.Name
+        text.TextScaled = true
+        text.TextColor3 = Color3.new(1,1,1)
+        text.Parent = bill
+    end
+end
+
+espButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        espButton.Text = "ESP ON"
+        animate(espButton, Color3.fromRGB(80,120,255))
+        for _, p in pairs(Players:GetPlayers()) do
+            addESP(p)
+        end
+    else
+        espButton.Text = "ESP OFF"
+        animate(espButton, Color3.fromRGB(45,45,65))
+        for _, p in pairs(Players:GetPlayers()) do
+            local char = p.Character
+            if char then
+                local hl = char:FindFirstChildOfClass("Highlight")
+                if hl then hl:Destroy() end
+                local head = char:FindFirstChild("Head")
+                if head then
+                    local bill = head:FindFirstChildOfClass("BillboardGui")
+                    if bill then bill:Destroy() end
+                end
+            end
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        if espEnabled then
+            addESP(plr)
+        end
+    end)
+end)
+
+-- ========== BOOST ==========
+local function createBoostFrame()
+    if boostFrame then boostFrame:Destroy() end
+    boostFrame = Instance.new("Frame")
+    boostFrame.Parent = gui
+    boostFrame.Size = UDim2.new(0,200,0,100)
+    boostFrame.Position = UDim2.new(0.35,320,0.35,0)
+    boostFrame.BackgroundColor3 = Color3.fromRGB(25,25,30)
+    boostFrame.BackgroundTransparency = 0.25
+    boostFrame.Active = true
+    boostFrame.Draggable = true
+
+    local boostCorner = Instance.new("UICorner")
+    boostCorner.CornerRadius = UDim.new(0,14)
+    boostCorner.Parent = boostFrame
+
+    local boostLabel = Instance.new("TextLabel")
+    boostLabel.Parent = boostFrame
+    boostLabel.Size = UDim2.new(1,0,0,30)
+    boostLabel.BackgroundTransparency = 1
+    boostLabel.Text = "BOOST PANEL"
+    boostLabel.TextScaled = true
+    boostLabel.TextColor3 = Color3.new(1,1,1)
+
+    local holdButton = Instance.new("TextButton")
+    holdButton.Parent = boostFrame
+    holdButton.Size = UDim2.new(0.8,0,0.4,0)
+    holdButton.Position = UDim2.new(0.1,0,0.4,0)
+    holdButton.Text = "HOLD TO FLY"
+    holdButton.BackgroundColor3 = Color3.fromRGB(120,90,255)
+    holdButton.TextColor3 = Color3.new(1,1,1)
+    local holdCorner = Instance.new("UICorner")
+    holdCorner.CornerRadius = UDim.new(0,12)
+    holdCorner.Parent = holdButton
+
+    local function onBoostStart()
+        if not rootPart then
+            rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        end
+        if not rootPart then return end
+        if boostBodyVelocity then boostBodyVelocity:Destroy() end
+        boostBodyVelocity = Instance.new("BodyVelocity")
+        boostBodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+        boostBodyVelocity.Velocity = Vector3.new(0, 20, 0)
+        boostBodyVelocity.Parent = rootPart
+    end
+
+    local function onBoostEnd()
+        if boostBodyVelocity then
+            boostBodyVelocity:Destroy()
+            boostBodyVelocity = nil
+        end
+    end
+
+    holdButton.MouseButton1Down:Connect(onBoostStart)
+    holdButton.MouseButton1Up:Connect(onBoostEnd)
+    UserInputService.InputEnded:Connect(function(input, gp)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            onBoostEnd()
+        end
+    end)
+
+    player.CharacterAdded:Connect(onBoostEnd)
+end
+
+boostMainButton.MouseButton1Click:Connect(function()
+    boostEnabled = not boostEnabled
+    if boostEnabled then
+        boostMainButton.Text = "BOOST ON"
+        animate(boostMainButton, Color3.fromRGB(255,150,0))
+        createBoostFrame()
+    else
+        boostMainButton.Text = "BOOST OFF"
+        animate(boostMainButton, Color3.fromRGB(45,45,65))
+        if boostFrame then
+            boostFrame:Destroy()
+            boostFrame = nil
+        end
+        if boostBodyVelocity then
+            boostBodyVelocity:Destroy()
+            boostBodyVelocity = nil
+        end
+    end
+end)
+
+-- ========== SLOWFALL ==========
+slowfallButton.MouseButton1Click:Connect(function()
+    slowfallEnabled = not slowfallEnabled
+    if slowfallEnabled then
+        slowfallButton.Text = "SLOWFALL ON"
+        animate(slowfallButton, Color3.fromRGB(120,90,255))
+        if currentSlowfallForce then currentSlowfallForce:Destroy() end
+        currentSlowfallForce = Instance.new("BodyVelocity")
+        currentSlowfallForce.MaxForce = Vector3.new(0, math.huge, 0)
+        currentSlowfallForce.Velocity = Vector3.new(0, -5, 0)
+        currentSlowfallForce.Parent = rootPart
+        humanoid.AutoRotate = false
+    else
+        slowfallButton.Text = "SLOWFALL OFF"
+        animate(slowfallButton, Color3.fromRGB(45,45,65))
+        if currentSlowfallForce then
+            currentSlowfallForce:Destroy()
+            currentSlowfallForce = nil
+        end
+        humanoid.AutoRotate = true
+    end
+end)
+
+-- ========== NOCLIP (обычный, без лагов) ==========
+local noclipConnection = nil
+
+noclipButton.MouseButton1Click:Connect(function()
+    noclipEnabled = not noclipEnabled
+    if noclipEnabled then
+        noclipButton.Text = "NOCLIP ON"
+        animate(noclipButton, Color3.fromRGB(200,100,200))
+        
+        noclipConnection = RunService.Stepped:Connect(function()
+            if not character or not character.Parent then
+                character = player.Character
+                if not character then return end
+                humanoid = character:FindFirstChild("Humanoid")
+                rootPart = character:FindFirstChild("HumanoidRootPart")
+            end
+            if character then
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+
+    else
+        noclipButton.Text = "NOCLIP OFF"
+        animate(noclipButton, Color3.fromRGB(45,45,65))
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+    end
+end)
+
+-- ========== BRAINROT (ускоренное уничтожение античита + свобода движения) ==========
+local function destroyAntiCheat()
+    local keywords = {"kick", "ban", "ant", "cheat", "ac", "anti", "detect", "moderator", "exploit", "inject", "mod", "admin", "guard", "secure", "protection", "audit", "log", "monitor", "punish", "mute", "freeze", "slow", "speed", "control", "force"}
+    local services = {
+        game:GetService("CoreGui"),
+        game:GetService("Players"),
+        game:GetService("Workspace"),
+        game:GetService("StarterGui"),
+        game:GetService("StarterPack"),
+        game:GetService("ReplicatedStorage"),
+        game:GetService("ServerStorage"),
+        game:GetService("ServerScriptService"),
+        player:FindFirstChild("PlayerGui"),
+        player:FindFirstChild("Backpack"),
+        player.Character
+    }
+
+    local function scanAndDestroy(container)
+        if not container then return end
+        for _, obj in ipairs(container:GetDescendants()) do
+            -- Уничтожаем скрипты
+            if obj:IsA("Script") or obj:IsA("LocalScript") then
+                for _, kw in ipairs(keywords) do
+                    if obj.Name:lower():find(kw) or (obj.Source and obj.Source:lower():find(kw)) then
+                        pcall(function() obj:Destroy() end)
+                        break
+                    end
+                end
+            end
+            -- Уничтожаем объекты с подозрительными именами
+            if obj:IsA("ScreenGui") or obj:IsA("SurfaceGui") or obj:IsA("BillboardGui") or obj:IsA("Folder") or obj:IsA("Model") then
+                for _, kw in ipairs(keywords) do
+                    if obj.Name:lower():find(kw) then
+                        pcall(function() obj:Destroy() end)
+                        break
+                    end
+                end
+            end
+            -- Уничтожаем BodyMover'ы, которые могут ограничивать движение (если они не наши)
+            if obj:IsA("BodyVelocity") or obj:IsA("BodyPosition") or obj:IsA("BodyGyro") or obj:IsA("BodyThrust") then
+                -- Если это не наш slowfall/boost, удаляем
+                if obj ~= currentSlowfallForce and obj ~= boostBodyVelocity then
+                    pcall(function() obj:Destroy() end)
+                end
+            end
+        end
+    end
+
+    for _, service in ipairs(services) do
+        scanAndDestroy(service)
+    end
+
+    -- Принудительно восстанавливаем скорость ходьбы
+    if humanoid then
+        humanoid.WalkSpeed = 16
+    end
+end
+
+brainrotButton.MouseButton1Click:Connect(function()
+    brainrotEnabled = not brainrotEnabled
+    if brainrotEnabled then
+        brainrotButton.Text = "BRAINROT ON"
+        animate(brainrotButton, Color3.fromRGB(180,0,180))
+        
+        -- Первый залп
+        destroyAntiCheat()
+        
+        -- Запускаем бесконечную проверку каждую секунду (ускорено)
+        brainrotConnection = RunService.Heartbeat:Connect(function()
+            wait(1)  -- проверка каждую секунду
+            if brainrotEnabled then
+                destroyAntiCheat()
+                -- Дополнительно: гарантируем, что скорость не сброшена античитом
+                if humanoid then
+                    humanoid.WalkSpeed = 16
+                end
+            end
+        end)
+
+        print("[FSOCIETY] BRAINROT MODE ACTIVATED: Anti-cheat annihilation (fast) + free movement enabled.")
+    else
+        brainrotButton.Text = "BRAINROT OFF"
+        animate(brainrotButton, Color3.fromRGB(45,45,65))
+        if brainrotConnection then
+            brainrotConnection:Disconnect()
+            brainrotConnection = nil
+        end
+        print("[FSOCIETY] BRAINROT MODE deactivated.")
+    end
+end)
+
+-- ========== Обработка смены персонажа ==========
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoid = character:WaitForChild("Humanoid")
+    rootPart = character:WaitForChild("HumanoidRootPart")
+    if slowfallEnabled then
+        if currentSlowfallForce then currentSlowfallForce:Destroy() end
+        currentSlowfallForce = Instance.new("BodyVelocity")
+        currentSlowfallForce.MaxForce = Vector3.new(0, math.huge, 0)
+        currentSlowfallForce.Velocity = Vector3.new(0, -5, 0)
+        currentSlowfallForce.Parent = rootPart
+    end
+    if noclipEnabled then
+        -- останется активным через Stepped
+    end
+    if brainrotEnabled then
+        -- дополнительно просканируем нового персонажа
+        destroyAntiCheat()
+    end
+    bypassAntiCheat()
+end)
+
+-- Постоянный обход античита (мониторинг новых объектов)
+workspace.DescendantAdded:Connect(function(desc)
+    if antiCheatBypassed and brainrotEnabled then
+        local keywords = {"kick", "ban", "ant", "cheat", "ac", "anti", "detect", "moderator", "exploit", "inject"}
+        if desc:IsA("Script") or desc:IsA("LocalScript") then
+            for _, kw in ipairs(keywords) do
+                if desc.Name:lower():find(kw) or (desc.Source and desc.Source:lower():find(kw)) then
+                    desc:Destroy()
+                    break
+                end
+            end
+        end
+    end
+end)
+
+print("[FSOCIETY] Panel loaded successfully. BRAINROT now works faster and ensures free movement.")
